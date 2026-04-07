@@ -31,6 +31,7 @@ from src.physics.force_types import VJoyAction
 from src.state.mode_base import ModeController
 from src.state.mode_handbrake import HandbrakeController
 from src.state.mode_hpattern import HPatternController
+from src.state.mode_autoprnd import AutoPRNDController
 from src.state.mode_sequential import SequentialController
 
 logger = logging.getLogger(__name__)

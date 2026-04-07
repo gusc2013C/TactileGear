@@ -46,7 +46,7 @@ class LayoutConfigurator(ctk.CTkFrame):
         ctk.CTkLabel(layout_frame, text="排布阵型:").pack(side="left", padx=(0, 10))
 
         self._layout_var = ctk.StringVar(value=LayoutID.CIVILIAN_6R_LEFT.value)
-        layout_names = {v.value: f"{lid.value}" for lid, v in self._LAYOUTS.items()}
+        layout_names = {v: lid.value for lid, v in self._LAYOUTS.items()}
         # 用 display name 显示
         display_values = [f"{lid.value}" for lid in self._LAYOUTS.keys()]
 
