@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import atexit
 import logging
-import sys
 import traceback
 
 from src.core.config_manager import (
@@ -40,7 +39,6 @@ def main() -> None:
     layouts = load_layouts()
     default_params = get_default_parameters()
 
-    # 加载用户配置
     profiles = load_profiles()
     active_name = get_active_profile_name()
     if active_name in profiles:
@@ -58,23 +56,53 @@ def main() -> None:
     # 2. 创建事件总线
     event_bus = EventBus()
 
-    # 3. 初始化硬件
+    # 3. 初始化 vJoy
     logger.info("初始化 vJoy...")
     vjoy = VJoyDevice(device_id=1)
     vjoy_connected = vjoy.connect()
 
+    # 4. 初始化 SDL（仅子系统，不打开设备）
     logger.info("初始化 SDL2...")
-    sdl = SDLDevice(joystick_name_pattern="MOZA")
-    sdl_connected = sdl.connect()
+    sdl = SDLDevice()
+    sdl_connected = sdl.init_sdl()
 
+    # 5. 枚举设备
+    devices = sdl.enumerate_joysticks() if sdl_connected else []
+    logger.info("检测到 %d 个摇杆设备", len(devices))
+    for d in devices:
+        logger.info("  [%d] %s  (GUID: %s)", d["index"], d["name"], d["guid"])
+
+    # 6. SimHub
     logger.info("初始化 SimHub 接收器...")
     simhub = SimHubReceiver(port=20777)
     simhub_connected = simhub.start()
 
-    # 4. 创建力反馈引擎
-    force_engine = ForceEngine(sdl)
+    # 7. 创建 GUI — 先显示主窗口，然后弹出设备选择
+    app = TactileGearApp(event_bus=event_bus, initial_params=params)
+    app.update_connection_status("vjoy", vjoy_connected)
+    app.update_connection_status("simhub", simhub_connected)
+    app.update_connection_status("moza", False)
 
-    # 5. 创建物理循环
+    # 显示设备选择对话框
+    if devices:
+        from src.gui.device_select import DeviceSelectDialog
+        dialog = DeviceSelectDialog(app, devices)
+        app.wait_window(dialog)
+        selected = dialog.selected_index
+
+        if selected is not None:
+            logger.info("用户选择了设备 [%d]", selected)
+            if sdl.open_joystick(selected):
+                app.update_connection_status("moza", True)
+            else:
+                logger.error("打开摇杆失败")
+        else:
+            logger.warning("用户跳过了设备选择")
+    else:
+        logger.warning("未检测到任何摇杆设备")
+
+    # 8. 创建力反馈引擎 + 物理循环
+    force_engine = ForceEngine(sdl)
     physics_loop = PhysicsLoop(
         sdl_device=sdl,
         vjoy_device=vjoy,
@@ -87,7 +115,7 @@ def main() -> None:
         initial_params=params,
     )
 
-    # 注册安全退出
+    # 紧急安全退出
     def emergency_stop():
         logger.info("紧急停止: 释放所有力反馈效果")
         try:
@@ -105,25 +133,16 @@ def main() -> None:
 
     atexit.register(emergency_stop)
 
-    # 6. 启动物理循环
+    # 9. 启动物理循环
     physics_loop.start()
 
-    # 7. 启动 GUI (主线程)
+    # 10. 启动 GUI 主循环
+    gui_queue = event_bus.subscribe()
+    app.start_polling(gui_queue)
+
     try:
-        app = TactileGearApp(event_bus=event_bus, initial_params=params)
-
-        # 更新连接状态
-        app.update_connection_status("moza", sdl_connected)
-        app.update_connection_status("vjoy", vjoy_connected)
-        app.update_connection_status("simhub", simhub_connected)
-
-        # 启动状态轮询
-        gui_queue = event_bus.subscribe()
-        app.start_polling(gui_queue)
-
         logger.info("GUI 已启动")
         app.mainloop()
-
     except KeyboardInterrupt:
         logger.info("收到 Ctrl+C，正在停止...")
     except Exception as e:
