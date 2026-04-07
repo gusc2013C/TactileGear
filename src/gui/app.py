@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import queue
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 import customtkinter as ctk
 
@@ -28,7 +28,13 @@ logger = logging.getLogger(__name__)
 class TactileGearApp(ctk.CTk):
     """TactileGear 主 GUI 窗口。"""
 
-    def __init__(self, event_bus: EventBus, initial_params: ProfileParameters) -> None:
+    def __init__(
+        self,
+        event_bus: EventBus,
+        initial_params: ProfileParameters,
+        sdl_device=None,
+        on_device_connected: Optional[Callable[[int], None]] = None,
+    ) -> None:
         super().__init__()
 
         self._event_bus = event_bus
@@ -43,7 +49,7 @@ class TactileGearApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         # 构建 UI
-        self._build_ui()
+        self._build_ui(sdl_device, on_device_connected)
 
         # 关闭窗口处理
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
@@ -53,10 +59,14 @@ class TactileGearApp(ctk.CTk):
         self._gui_queue = gui_queue
         self._poll_queue()
 
-    def _build_ui(self) -> None:
+    def _build_ui(self, sdl_device=None, on_device_connected=None) -> None:
         """构建所有 UI 组件。"""
-        # 顶部状态栏
-        self._status_bar = StatusBar(self)
+        # 顶部：连接面板（含设备选择 + 状态灯）
+        self._status_bar = StatusBar(
+            self,
+            sdl_device=sdl_device,
+            on_device_connected=on_device_connected,
+        )
         self._status_bar.pack(fill="x", padx=10, pady=(10, 5))
 
         # 模式选择器
@@ -89,7 +99,7 @@ class TactileGearApp(ctk.CTk):
 
         # 底部状态标签
         self._status_label = ctk.CTkLabel(
-            self, text="就绪", text_color="gray",
+            self, text="就绪 — 请先选择并连接力反馈设备", text_color="gray",
         )
         self._status_label.pack(fill="x", padx=10, pady=(0, 5))
 
