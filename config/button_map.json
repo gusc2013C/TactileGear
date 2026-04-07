@@ -1,0 +1,19 @@
+{
+  "device": "vJoy Device 1",
+  "axes": {
+    "X":  {"hid_usage": "0x30", "range": [1, 32768], "center": 16384},
+    "Y":  {"hid_usage": "0x31", "range": [1, 32768], "center": 16384},
+    "Z":  {"hid_usage": "0x32", "range": [1, 32768], "center": 16384},
+    "RX": {"hid_usage": "0x33", "range": [1, 32768], "center": 16384},
+    "RY": {"hid_usage": "0x34", "range": [1, 32768], "center": 16384, "note": "手刹模式专用轴"},
+    "RZ": {"hid_usage": "0x35", "range": [1, 32768], "center": 16384}
+  },
+  "buttons": {
+    "H_GEAR_1": 1, "H_GEAR_2": 2, "H_GEAR_3": 3, "H_GEAR_4": 4,
+    "H_GEAR_5": 5, "H_GEAR_6": 6, "H_GEAR_7": 7, "H_GEAR_8": 8,
+    "H_REVERSE": 9, "H_NEUTRAL": 10,
+    "SEQ_UP": 11, "SEQ_DOWN": 12,
+    "PRND_P": 13, "PRND_R": 14, "PRND_N": 15, "PRND_D": 16, "PRND_S": 17,
+    "TRUCK_RANGE": 18, "TRUCK_SPLITTER": 19
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "mode": "HPATTERN",
+  "layout_id": "CIVILIAN_6R_LEFT",
+  "reverse_unlock_method": "GRAVITY_BREAKTHROUGH",
+  "modifier_key": "SDL_SCANCODE_LCTRL",
+  "parameters": {
+    "max_torque_pct": 80,
+    "pull_in_force": 60,
+    "neutral_spring_force": 70,
+    "miss_penalty_force": 90,
+    "reverse_breakthrough_threshold": 0.75,
+    "clutch_grinding_enabled": true,
+    "clutch_grinding_force": 95,
+    "notch_vibration_magnitude": 50,
+    "notch_vibration_duration_ms": 80,
+    "seq_spring_force": 85,
+    "seq_bump_force": 75,
+    "seq_bump_vibration_hz": 150,
+    "seq_shift_debounce_ms": 200,
+    "handbrake_exponential_factor": 3.5,
+    "handbrake_max_resistance": 80,
+    "prnd_spring_force": 50,
+    "prnd_p_pullout_resistance": 90
+  }
+}

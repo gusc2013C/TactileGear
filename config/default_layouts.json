@@ -1,0 +1,72 @@
+{
+  "layouts": {
+    "CIVILIAN_6R_LEFT": {
+      "id": "CIVILIAN_6R_LEFT",
+      "display_name": "民用 6+R (左上倒档)",
+      "x_range": [0.0, 1.0],
+      "y_range": [0.0, 1.0],
+      "neutral_zone_y": [0.4, 0.6],
+      "neutral_center_x": 0.5,
+      "gates": [
+        {"gear": "R", "x": 0.1, "y": 0.2, "width": 0.08, "lockout_rule": "modifier_or_gravity"},
+        {"gear": "G1", "x": 0.3, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G3", "x": 0.5, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G5", "x": 0.7, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G2", "x": 0.3, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G4", "x": 0.5, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G6", "x": 0.7, "y": 0.8, "width": 0.08, "lockout_rule": null}
+      ]
+    },
+    "CIVILIAN_6R_RIGHT": {
+      "id": "CIVILIAN_6R_RIGHT",
+      "display_name": "民用 6+R (右下倒档)",
+      "x_range": [0.0, 1.0],
+      "y_range": [0.0, 1.0],
+      "neutral_zone_y": [0.4, 0.6],
+      "neutral_center_x": 0.4,
+      "gates": [
+        {"gear": "G1", "x": 0.2, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G3", "x": 0.4, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G5", "x": 0.6, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G2", "x": 0.2, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G4", "x": 0.4, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G6", "x": 0.6, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "R", "x": 0.85, "y": 0.8, "width": 0.08, "lockout_rule": "modifier_or_gravity"}
+      ]
+    },
+    "PORSCHE_7R": {
+      "id": "PORSCHE_7R",
+      "display_name": "保时捷/考维特 7+R",
+      "x_range": [0.0, 1.0],
+      "y_range": [0.0, 1.0],
+      "neutral_zone_y": [0.4, 0.6],
+      "neutral_center_x": 0.45,
+      "gates": [
+        {"gear": "R", "x": 0.07, "y": 0.2, "width": 0.06, "lockout_rule": "modifier_or_gravity"},
+        {"gear": "G1", "x": 0.21, "y": 0.2, "width": 0.06, "lockout_rule": null},
+        {"gear": "G3", "x": 0.36, "y": 0.2, "width": 0.06, "lockout_rule": null},
+        {"gear": "G5", "x": 0.50, "y": 0.2, "width": 0.06, "lockout_rule": null},
+        {"gear": "G7", "x": 0.65, "y": 0.2, "width": 0.06, "lockout_rule": "anti_miss_from_5"},
+        {"gear": "G2", "x": 0.21, "y": 0.8, "width": 0.06, "lockout_rule": null},
+        {"gear": "G4", "x": 0.36, "y": 0.8, "width": 0.06, "lockout_rule": null},
+        {"gear": "G6", "x": 0.50, "y": 0.8, "width": 0.06, "lockout_rule": null}
+      ]
+    },
+    "TRUCK_18": {
+      "id": "TRUCK_18",
+      "display_name": "卡车 Truck 18速",
+      "x_range": [0.0, 1.0],
+      "y_range": [0.0, 1.0],
+      "neutral_zone_y": [0.4, 0.6],
+      "neutral_center_x": 0.4,
+      "gates": [
+        {"gear": "G1", "x": 0.15, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G3", "x": 0.35, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G5", "x": 0.55, "y": 0.2, "width": 0.08, "lockout_rule": null},
+        {"gear": "G2", "x": 0.15, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G4", "x": 0.35, "y": 0.8, "width": 0.08, "lockout_rule": null},
+        {"gear": "G6", "x": 0.55, "y": 0.8, "width": 0.08, "lockout_rule": null}
+      ]
+    }
+  }
+}

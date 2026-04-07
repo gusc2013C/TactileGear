@@ -1,0 +1,2 @@
+pysdl2>=0.9.17
+customtkinter>=5.2.0
