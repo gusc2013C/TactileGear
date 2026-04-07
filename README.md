@@ -28,7 +28,7 @@ cd TactileGear
 pip install -r requirements.txt
 ```
 
-依赖仅两个：`pysdl2` 和 `customtkinter`。vJoy 通过 ctypes 直接调用系统 DLL，无需额外安装 pyvjoy。
+依赖仅两个：`PySDL3` 和 `customtkinter`。vJoy 通过 ctypes 直接调用系统 DLL，无需额外安装 pyvjoy。
 
 ## 运行
 
@@ -48,7 +48,7 @@ TactileGear/
 │   └── button_map.json              # vJoy 按钮映射文档
 ├── src/
 │   ├── core/                        # 枚举、事件总线、配置管理
-│   ├── hardware/                    # SDL2/ctypes-vJoy/SimHub 硬件封装
+│   ├── hardware/                    # SDL3/ctypes-vJoy/SimHub 硬件封装
 │   ├── state/                       # 4 种模式控制器
 │   ├── physics/                     # 力曲线、档位几何、FFB 效果引擎
 │   ├── engine/                      # 100Hz 物理主循环

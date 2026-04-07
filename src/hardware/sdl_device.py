@@ -1,4 +1,4 @@
-"""SDL2 摇杆和力反馈设备封装。"""
+"""SDL3 摇杆和力反馈设备封装。"""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class SDLDevice:
-    """SDL2 摇杆 + 力反馈设备封装。
+    """SDL3 摇杆 + 力反馈设备封装。
 
-    隔离所有 SDL ctypes 操作，对外只暴露高级 API。
+    隔离所有 SDL3 ctypes 操作，对外只暴露高级 API。
+    使用 PySDL3 (pip install PySDL3) 包装层。
     """
 
     def __init__(self) -> None:
@@ -23,7 +24,7 @@ class SDLDevice:
         self._joystick = None
         self._haptic = None
         self._connected = False
-        self._joystick_id: Optional[int] = None
+        self._joystick_id: Optional[int] = None  # SDL_JoystickID (uint32)
         self._joystick_name: str = ""
         self._num_axes = 0
         self._num_buttons = 0
@@ -37,84 +38,133 @@ class SDLDevice:
     def init_sdl(self) -> bool:
         """仅初始化 SDL 子系统（不打开任何设备）。"""
         try:
-            import sdl2
-            self._sdl = sdl2
+            import sdl3
+            self._sdl = sdl3
         except ImportError:
-            logger.error("PySDL2 未安装，请运行: pip install pysdl2")
+            logger.error("PySDL3 未安装，请运行: pip install PySDL3")
             return False
 
+        # SDL3: SDL_Init 返回 bool (True=成功)
         ret = self._sdl.SDL_Init(
             self._sdl.SDL_INIT_JOYSTICK | self._sdl.SDL_INIT_HAPTIC
         )
-        if ret < 0:
+        if not ret:
             err = self._sdl.SDL_GetError()
-            logger.error("SDL 初始化失败: %s", err)
+            err_str = err.decode("utf-8", errors="replace") if isinstance(err, bytes) else str(err)
+            logger.error("SDL 初始化失败: %s", err_str)
             return False
 
         self._sdl_initialized = True
         atexit.register(self._cleanup)
-        logger.info("SDL 子系统初始化完成")
+        logger.info("SDL3 子系统初始化完成")
         return True
 
     def enumerate_joysticks(self) -> list[dict]:
         """枚举所有可用摇杆设备。
 
         Returns:
-            [{"index": 0, "name": "MOZA AB6", "guid": "..."}, ...]
+            [{"instance_id": 123, "name": "MOZA AB6", "guid": "..."}, ...]
         """
         if not self._sdl_initialized:
             if not self.init_sdl():
                 return []
 
+        sdl3 = self._sdl
         devices = []
-        n = self._sdl.SDL_NumJoysticks()
-        for i in range(n):
-            raw_name = self._sdl.SDL_JoystickNameForIndex(i)
-            name = raw_name.decode("utf-8", errors="replace") if raw_name else f"Joystick {i}"
-            guid_buf = ctypes.create_string_buffer(33)
-            self._sdl.SDL_JoystickGetDeviceGUIDString(i, guid_buf, 33)
-            guid = guid_buf.value.decode("ascii", errors="replace")
-            devices.append({"index": i, "name": name, "guid": guid})
+
+        # SDL3: SDL_GetJoysticks(count) 返回 SDL_JoystickID 数组
+        count = ctypes.c_int(0)
+        ids_ptr = sdl3.SDL_GetJoysticks(ctypes.byref(count))
+
+        if not ids_ptr or count.value <= 0:
+            return devices
+
+        for i in range(count.value):
+            try:
+                instance_id = int(ids_ptr[i])
+            except (TypeError, IndexError):
+                continue
+            if instance_id == 0:
+                break  # NULL 终止符
+
+            # 名称
+            name_raw = sdl3.SDL_GetJoystickNameForID(instance_id)
+            if isinstance(name_raw, bytes):
+                name = name_raw.decode("utf-8", errors="replace")
+            elif name_raw:
+                name = str(name_raw)
+            else:
+                name = f"Joystick {instance_id}"
+
+            # GUID
+            guid_str = ""
+            try:
+                guid = sdl3.SDL_GetJoystickGUIDForID(instance_id)
+                guid_buf = ctypes.create_string_buffer(33)
+                sdl3.SDL_GUIDToString(guid, guid_buf, 33)
+                guid_str = guid_buf.value.decode("ascii", errors="replace")
+            except Exception:
+                guid_str = "unknown"
+
+            devices.append({
+                "instance_id": instance_id,
+                "name": name,
+                "guid": guid_str,
+            })
+
+        # 释放 SDL 分配的数组
+        try:
+            sdl3.SDL_free(ids_ptr)
+        except Exception:
+            pass
+
         return devices
 
-    def open_joystick(self, index: int) -> bool:
-        """打开指定索引的摇杆并初始化力反馈。
+    def open_joystick(self, instance_id: int) -> bool:
+        """打开指定 SDL_JoystickID 的摇杆并初始化力反馈。
 
         Args:
-            index: 摇杆索引（来自 enumerate_joysticks）
+            instance_id: 摇杆实例 ID（来自 enumerate_joysticks）
         """
         if not self._sdl_initialized:
             if not self.init_sdl():
                 return False
 
-        sdl2 = self._sdl
+        sdl3 = self._sdl
 
         # 如果已经打开了一个设备，先关闭
         if self._joystick:
             self.close_joystick()
 
-        raw_name = sdl2.SDL_JoystickNameForIndex(index)
-        self._joystick_name = raw_name.decode("utf-8", errors="replace") if raw_name else f"Joystick {index}"
+        name_raw = sdl3.SDL_GetJoystickNameForID(instance_id)
+        if isinstance(name_raw, bytes):
+            self._joystick_name = name_raw.decode("utf-8", errors="replace")
+        elif name_raw:
+            self._joystick_name = str(name_raw)
+        else:
+            self._joystick_name = f"Joystick {instance_id}"
 
-        self._joystick = sdl2.SDL_JoystickOpen(index)
+        # SDL3: SDL_OpenJoystick(instance_id)
+        self._joystick = sdl3.SDL_OpenJoystick(instance_id)
         if not self._joystick:
-            err = sdl2.SDL_GetError()
-            logger.error("打开摇杆 %d (%s) 失败: %s", index, self._joystick_name, err)
+            err = sdl3.SDL_GetError()
+            err_str = err.decode("utf-8", errors="replace") if isinstance(err, bytes) else str(err)
+            logger.error("打开摇杆 %s (ID=%d) 失败: %s", self._joystick_name, instance_id, err_str)
             return False
 
-        self._joystick_id = index
-        self._num_axes = sdl2.SDL_JoystickNumAxes(self._joystick)
-        self._num_buttons = sdl2.SDL_JoystickNumButtons(self._joystick)
+        self._joystick_id = instance_id
+        self._num_axes = sdl3.SDL_GetNumJoystickAxes(self._joystick)
+        self._num_buttons = sdl3.SDL_GetNumJoystickButtons(self._joystick)
 
-        # 打开力反馈
-        self._haptic = sdl2.SDL_HapticOpenFromJoystick(self._joystick)
+        # 打开力反馈 — SDL3: SDL_OpenHapticFromJoystick
+        self._haptic = sdl3.SDL_OpenHapticFromJoystick(self._joystick)
         if self._haptic:
-            self._haptic_capabilities = sdl2.SDL_HapticQuery(self._haptic)
+            self._haptic_capabilities = sdl3.SDL_GetHapticFeatures(self._haptic)
             logger.info(
                 "力反馈已打开，支持: constant=%s spring=%s periodic=%s",
-                bool(self._haptic_capabilities & sdl2.SDL_HAPTIC_CONSTANT),
-                bool(self._haptic_capabilities & sdl2.SDL_HAPTIC_SPRING),
-                bool(self._haptic_capabilities & sdl2.SDL_HAPTIC_SQUARE),
+                bool(self._haptic_capabilities & sdl3.SDL_HAPTIC_CONSTANT),
+                bool(self._haptic_capabilities & sdl3.SDL_HAPTIC_SPRING),
+                bool(self._haptic_capabilities & sdl3.SDL_HAPTIC_SQUARE),
             )
         else:
             logger.warning("该设备不支持力反馈")
@@ -132,13 +182,13 @@ class SDLDevice:
         self.stop_all()
         if self._haptic:
             try:
-                self._sdl.SDL_HapticClose(self._haptic)
+                self._sdl.SDL_CloseHaptic(self._haptic)
             except Exception:
                 pass
             self._haptic = None
         if self._joystick:
             try:
-                self._sdl.SDL_JoystickClose(self._joystick)
+                self._sdl.SDL_CloseJoystick(self._joystick)
             except Exception:
                 pass
             self._joystick = None
@@ -166,13 +216,15 @@ class SDLDevice:
         """读取原始轴值 (-32768 ~ 32767)。"""
         if not self._connected or not self._joystick:
             return 0
-        return self._sdl.SDL_JoystickGetAxis(self._joystick, axis_index)
+        val = self._sdl.SDL_GetJoystickAxis(self._joystick, axis_index)
+        return int(val)
 
     def read_button(self, button_index: int) -> bool:
         """读取按钮状态。"""
         if not self._connected or not self._joystick:
             return False
-        return self._sdl.SDL_JoystickGetButton(self._joystick, button_index) == 1
+        val = self._sdl.SDL_GetJoystickButton(self._joystick, button_index)
+        return bool(val)
 
     def read_normalized_position(self) -> GatePosition:
         """读取归一化的摇杆位置 (0.0 ~ 1.0)。"""
@@ -190,7 +242,7 @@ class SDLDevice:
         return self.read_button(0)
 
     # =========================================================================
-    # 力反馈 API
+    # 力反馈 API — SDL3 重命名版本
     # =========================================================================
 
     def create_constant_force(
@@ -207,14 +259,14 @@ class SDLDevice:
         if not self._haptic or not self._sdl:
             return None
 
-        sdl2 = self._sdl
-        effect = sdl2.SDL_HapticEffect()
-        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl2.SDL_HapticEffect))
+        sdl3 = self._sdl
+        effect = sdl3.SDL_HapticEffect()
+        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl3.SDL_HapticEffect))
 
-        effect.type = sdl2.SDL_HAPTIC_CONSTANT
+        effect.type = sdl3.SDL_HAPTIC_CONSTANT
         c = effect.constant
-        c.type = sdl2.SDL_HAPTIC_CONSTANT
-        c.direction.type = sdl2.SDL_HAPTIC_CARTESIAN
+        c.type = sdl3.SDL_HAPTIC_CONSTANT
+        c.direction.type = sdl3.SDL_HAPTIC_CARTESIAN
         c.direction.dir[0] = 1 if level >= 0 else -1
         c.direction.dir[1] = 0
         c.length = duration
@@ -224,7 +276,8 @@ class SDLDevice:
         c.fade_length = fade_length
         c.fade_level = fade_level
 
-        effect_id = sdl2.SDL_HapticNewEffect(self._haptic, ctypes.byref(effect))
+        # SDL3: SDL_CreateHapticEffect
+        effect_id = sdl3.SDL_CreateHapticEffect(self._haptic, ctypes.byref(effect))
         if effect_id < 0:
             logger.error("创建恒定力效果失败")
             return None
@@ -242,11 +295,11 @@ class SDLDevice:
         if not self._haptic or not self._sdl:
             return None
 
-        sdl2 = self._sdl
-        effect = sdl2.SDL_HapticEffect()
-        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl2.SDL_HapticEffect))
+        sdl3 = self._sdl
+        effect = sdl3.SDL_HapticEffect()
+        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl3.SDL_HapticEffect))
 
-        effect.type = sdl2.SDL_HAPTIC_SPRING
+        effect.type = sdl3.SDL_HAPTIC_SPRING
         s = effect.condition
         for axis_idx in (0, 1):
             s.right_sat[axis_idx] = saturation
@@ -257,7 +310,7 @@ class SDLDevice:
             s.center[axis_idx] = center
         s.length = duration
 
-        effect_id = sdl2.SDL_HapticNewEffect(self._haptic, ctypes.byref(effect))
+        effect_id = sdl3.SDL_CreateHapticEffect(self._haptic, ctypes.byref(effect))
         if effect_id < 0:
             logger.error("创建弹簧效果失败")
             return None
@@ -275,14 +328,14 @@ class SDLDevice:
         if not self._haptic or not self._sdl:
             return None
 
-        sdl2 = self._sdl
-        effect = sdl2.SDL_HapticEffect()
-        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl2.SDL_HapticEffect))
+        sdl3 = self._sdl
+        effect = sdl3.SDL_HapticEffect()
+        ctypes.memset(ctypes.byref(effect), 0, ctypes.sizeof(sdl3.SDL_HapticEffect))
 
-        effect.type = sdl2.SDL_HAPTIC_SQUARE
+        effect.type = sdl3.SDL_HAPTIC_SQUARE
         p = effect.periodic
-        p.type = sdl2.SDL_HAPTIC_SQUARE
-        p.direction.type = sdl2.SDL_HAPTIC_CARTESIAN
+        p.type = sdl3.SDL_HAPTIC_SQUARE
+        p.direction.type = sdl3.SDL_HAPTIC_CARTESIAN
         p.direction.dir[0] = 1
         p.period = period
         p.magnitude = max(0, min(32767, magnitude))
@@ -290,7 +343,7 @@ class SDLDevice:
         p.attack_length = attack_length
         p.fade_length = fade_length
 
-        effect_id = sdl2.SDL_HapticNewEffect(self._haptic, ctypes.byref(effect))
+        effect_id = sdl3.SDL_CreateHapticEffect(self._haptic, ctypes.byref(effect))
         if effect_id < 0:
             logger.error("创建方波效果失败")
             return None
@@ -300,25 +353,25 @@ class SDLDevice:
         """运行指定效果。"""
         if not self._haptic or effect_id < 0:
             return False
-        return self._sdl.SDL_HapticRunEffect(self._haptic, effect_id, iterations) >= 0
+        return bool(self._sdl.SDL_RunHapticEffect(self._haptic, effect_id, iterations))
 
     def stop_effect(self, effect_id: int) -> bool:
         """停止指定效果。"""
         if not self._haptic or effect_id < 0:
             return False
-        return self._sdl.SDL_HapticStopEffect(self._haptic, effect_id) >= 0
+        return bool(self._sdl.SDL_StopHapticEffect(self._haptic, effect_id))
 
     def destroy_effect(self, effect_id: int) -> None:
         """销毁指定效果。"""
         if not self._haptic or effect_id < 0:
             return
-        self._sdl.SDL_HapticDestroyEffect(self._haptic, effect_id)
+        self._sdl.SDL_DestroyHapticEffect(self._haptic, effect_id)
 
     def stop_all(self) -> None:
         """停止所有力反馈效果（紧急安全机制）。"""
         if self._haptic:
             try:
-                self._sdl.SDL_HapticStopAll(self._haptic)
+                self._sdl.SDL_StopHapticEffects(self._haptic)
                 logger.info("所有力反馈效果已停止")
             except Exception as e:
                 logger.error("停止力反馈失败: %s", e)

@@ -115,7 +115,7 @@ class StatusBar(ctk.CTkFrame):
             self._device_status.configure(text=f"未检测到设备", text_color="orange")
             return
 
-        names = [f"[{d['index']}] {d['name']}" for d in self._devices]
+        names = [f"[{i}] {d['name']}" for i, d in enumerate(self._devices)]
         self._device_combo.configure(values=names, state="normal")
         self._device_var.set(names[0])
         self._device_status.configure(text=f"检测到 {len(names)} 个设备", text_color="gray")
@@ -132,21 +132,22 @@ class StatusBar(ctk.CTkFrame):
             self._device_status.configure(text="没有可用设备", text_color="red")
             return
 
-        # 解析选中设备索引
+        # 解析选中设备 — 从列表位置获取 instance_id
         selected_text = self._device_var.get()
         try:
             idx_str = selected_text.split("]")[0].replace("[", "")
-            selected_index = int(idx_str)
-        except (ValueError, IndexError):
+            display_idx = int(idx_str)
+            instance_id = self._devices[display_idx]["instance_id"]
+        except (ValueError, IndexError, KeyError):
             self._device_status.configure(text="请选择一个设备", text_color="orange")
             return
 
         self._device_status.configure(text="正在连接...", text_color=self._COLORS["connecting"])
         self.update_idletasks()
 
-        success = self._sdl.open_joystick(selected_index)
+        success = self._sdl.open_joystick(instance_id)
         if success:
-            self._connected_index = selected_index
+            self._connected_index = instance_id
             self._btn_connect.configure(text="断开", fg_color="#cc0000")
             self._device_combo.configure(state="disabled")
             self._btn_refresh.configure(state="disabled")
@@ -155,7 +156,7 @@ class StatusBar(ctk.CTkFrame):
             )
             self.set_status("ffb", True)
             if self._on_device_connected:
-                self._on_device_connected(selected_index)
+                self._on_device_connected(instance_id)
         else:
             self._device_status.configure(text="连接失败", text_color="red")
             self.set_status("ffb", False)
