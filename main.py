@@ -63,10 +63,12 @@ class TactileGearRuntime:
             initial_layout = list(layouts.values())[0] if layouts else None
             params = default_params
 
-        # 创建 vJoy
+        # 创建 vJoy（未安装时仅警告，不影响运行）
         logger.info("初始化 vJoy...")
         vjoy = VJoyDevice(device_id=1)
         vjoy_connected = vjoy.connect()
+        if not vjoy_connected:
+            logger.warning("vJoy 不可用 — 按钮和轴输出将被跳过。安装 vJoy 后重启即可启用。")
 
         # SimHub
         logger.info("初始化 SimHub 接收器...")
@@ -107,8 +109,8 @@ def main() -> None:
 
     runtime = TactileGearRuntime()
 
-    # 1. 初始化 SDL（仅子系统）
-    logger.info("初始化 SDL2...")
+    # 1. 初始化 SDL3（仅子系统）
+    logger.info("初始化 SDL3...")
     sdl = SDLDevice()
     sdl_connected = sdl.init_sdl()
 

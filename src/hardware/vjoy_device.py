@@ -1,4 +1,4 @@
-"""ctypes 直接调用 vJoyInterface.dll，无第三方依赖。"""
+"""ctypes 直接调用 vJoyInterface.dll，无第三方依赖。支持自动配置设备。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import ctypes.wintypes
 import logging
 import os
 import platform
+import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -48,25 +50,30 @@ AXIS_NAME_TO_HID = {
 }
 
 # vJoy 设备状态
-VJD_STAT_OWN = 0  # 已拥有
+VJD_STAT_OWN = 0   # 已拥有
 VJD_STAT_FREE = 1  # 空闲
 VJD_STAT_BUSY = 2  # 被其他程序占用
 VJD_STAT_MISS = 3  # 不存在
+
+# 项目需要的设备配置
+REQUIRED_BUTTONS = 32
+REQUIRED_AXES = 8  # X Y Z RX RY RZ SL0 SL1
 
 
 class VJoyDevice:
     """通过 ctypes 直接调用 vJoyInterface.dll 的虚拟设备封装。
 
-    不依赖 pyvjoy 第三方库，直接使用 Windows DLL。
+    支持自动配置：当 vJoy 已安装但设备未创建时，自动调用 vJoyConfig 创建。
     """
 
     def __init__(self, device_id: int = 1) -> None:
         self._device_id = device_id
         self._dll: Optional[ctypes.CDLL] = None
+        self._dll_dir: Optional[Path] = None  # DLL 所在目录
         self._connected = False
 
     def connect(self) -> bool:
-        """加载 DLL 并获取 vJoy 设备。返回是否成功。"""
+        """加载 DLL 并获取 vJoy 设备。自动配置缺失的设备。"""
         if platform.system() != "Windows":
             logger.error("vJoy 只支持 Windows 平台")
             return False
@@ -75,9 +82,12 @@ class VJoyDevice:
         dll_path = self._find_dll()
         if dll_path is None:
             logger.error(
-                "未找到 vJoyInterface.dll。请确认已安装 vJoy 驱动。"
+                "未找到 vJoyInterface.dll。\n"
+                "请安装 vJoy: https://sourceforge.net/projects/vjoystick/"
             )
             return False
+
+        self._dll_dir = dll_path.parent
 
         try:
             self._dll = ctypes.CDLL(str(dll_path))
@@ -89,7 +99,10 @@ class VJoyDevice:
 
         # 检查 vJoy 是否启用
         if not self._dll.vJoyEnabled():
-            logger.error("vJoy 驱动未启用")
+            logger.error(
+                "vJoy 驱动未启用。\n"
+                "请打开 vJoyConf 确认驱动已安装并启动。"
+            )
             return False
 
         # 检查驱动版本匹配
@@ -103,12 +116,33 @@ class VJoyDevice:
 
         # 检查目标设备状态
         status = self._dll.GetVJDStatus(self._device_id)
+
         if status == VJD_STAT_MISS:
-            logger.error("vJoy 设备 %d 不存在，请在 vJoy 配置中启用", self._device_id)
-            return False
+            # 设备不存在 — 尝试自动创建
+            logger.info("vJoy 设备 %d 未配置，尝试自动创建...", self._device_id)
+            if self._auto_create_device():
+                time.sleep(1.0)  # 等待驱动注册设备
+                status = self._dll.GetVJDStatus(self._device_id)
+            if status == VJD_STAT_MISS:
+                logger.error(
+                    "自动创建 vJoy 设备失败。\n"
+                    "请手动运行 vJoyConf.exe:\n"
+                    "  1. 创建设备 %d\n"
+                    "  2. 设置按钮数 = %d\n"
+                    "  3. 启用 8 个轴 (X/Y/Z/RX/RY/RZ/SL0/SL1)\n"
+                    "  4. 重启 vJoy 驱动",
+                    self._device_id, REQUIRED_BUTTONS,
+                )
+                return False
+
         if status == VJD_STAT_BUSY:
             logger.error("vJoy 设备 %d 被其他程序占用", self._device_id)
             return False
+
+        # 如果已经被我们持有，先释放再重新获取
+        if status == VJD_STAT_OWN:
+            self._dll.RelinquishVJD(self._device_id)
+            time.sleep(0.1)
 
         # 获取设备
         if not self._dll.AcquireVJD(self._device_id):
@@ -119,14 +153,97 @@ class VJoyDevice:
         self._dll.ResetVJD(self._device_id)
 
         self._connected = True
-        logger.info(
-            "vJoy 设备 %d 已连接 (DLL: %s)", self._device_id, dll_path,
-        )
+        logger.info("vJoy 设备 %d 已连接 (DLL: %s)", self._device_id, dll_path)
         return True
 
     @property
     def connected(self) -> bool:
         return self._connected
+
+    # =========================================================================
+    # 自动配置
+    # =========================================================================
+
+    def _auto_create_device(self) -> bool:
+        """尝试调用 vJoyConfig.exe 自动创建并配置设备。"""
+        config_exe = self._find_config_tool()
+        if not config_exe:
+            logger.warning(
+                "未找到 vJoyConfig.exe，无法自动配置。\n"
+                "请手动运行 vJoyConf.exe 创建设备。"
+            )
+            return False
+
+        logger.info("找到配置工具: %s", config_exe)
+
+        # 尝试多种命令行格式（不同 vJoy 版本语法不同）
+        commands = [
+            # vJoy 2.2+ 格式
+            [str(config_exe), "create", str(self._device_id),
+             "/B", str(REQUIRED_BUTTONS), "/H", str(REQUIRED_AXES)],
+            # 备选格式
+            [str(config_exe), "create", str(self._device_id),
+             "-b", str(REQUIRED_BUTTONS), "-a", str(REQUIRED_AXES)],
+            # 最简格式
+            [str(config_exe), "-create", str(self._device_id),
+             "-b", str(REQUIRED_BUTTONS)],
+        ]
+
+        for cmd in commands:
+            try:
+                result = subprocess.run(
+                    cmd, capture_output=True, timeout=15,
+                )
+                if result.returncode == 0:
+                    logger.info("vJoy 设备 %d 自动创建成功", self._device_id)
+                    return True
+            except (subprocess.TimeoutExpired, OSError):
+                continue
+
+        # 直接运行失败，尝试提权运行（弹出 UAC 提示）
+        logger.info("尝试以管理员权限运行配置工具...")
+        try:
+            cmd_str = f'create {self._device_id} /B {REQUIRED_BUTTONS} /H {REQUIRED_AXES}'
+            ret = ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", str(config_exe), cmd_str,
+                str(config_exe.parent), 0,  # SW_HIDE
+            )
+            # ShellExecuteW 返回 > 31 表示成功启动
+            if ret > 32:
+                logger.info("已弹出 vJoy 配置请求（需要管理员权限）")
+                time.sleep(3.0)  # 给用户时间确认 UAC
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def _find_config_tool(self) -> Optional[Path]:
+        """搜索 vJoyConfig.exe / vJoyConf.exe。"""
+        if not self._dll_dir:
+            return None
+
+        dll_dir = self._dll_dir
+
+        candidates = [
+            # DLL 同目录
+            dll_dir / "vJoyConfig.exe",
+            dll_dir / "vJoyConf.exe",
+            # 上级目录
+            dll_dir.parent / "vJoyConfig.exe",
+            dll_dir.parent / "vJoyConf.exe",
+            # SDK 子目录
+            dll_dir.parent / "sdk" / "vJoyConfig.exe",
+            # vJoy 安装目录常见路径
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "vJoy" / "vJoyConfig.exe",
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "vJoy" / "vJoyConf.exe",
+        ]
+
+        for p in candidates:
+            if p.is_file():
+                return p
+
+        return None
 
     # =========================================================================
     # 按钮操作
